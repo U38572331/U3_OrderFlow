@@ -36,7 +36,7 @@ impl From<Theme> for iced_core::Theme {
 
 pub fn default_theme() -> Custom {
     Custom::new(
-        "Flowsurface".to_string(),
+        "U3 OrderFlow".to_string(),
         Palette {
             background: Color::from_rgb8(24, 22, 22),
             text: Color::from_rgb8(197, 201, 197),
@@ -54,7 +54,7 @@ impl Serialize for Theme {
         S: serde::Serializer,
     {
         if let iced_core::Theme::Custom(custom) = &self.0 {
-            let is_default_theme = custom.to_string() == "Flowsurface";
+            let is_default_theme = custom.to_string() == "U3 OrderFlow";
             let ser_theme = SerTheme {
                 name: if is_default_theme {
                     "flowsurface"

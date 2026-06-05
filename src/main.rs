@@ -682,7 +682,7 @@ impl Flowsurface {
                 #[cfg(target_os = "macos")]
                 {
                     iced::widget::center(
-                        text("FLOWSURFACE")
+                        text("U3 ORDERFLOW")
                             .font(iced::Font {
                                 weight: iced::font::Weight::Bold,
                                 ..Default::default()
@@ -746,9 +746,9 @@ impl Flowsurface {
 
     fn title(&self, _window: window::Id) -> String {
         if let Some(id) = self.layout_manager.active_layout_id() {
-            format!("Flowsurface [{}]", id.name)
+            format!("U3 OrderFlow [{}]", id.name)
         } else {
-            "Flowsurface".to_string()
+            "U3 OrderFlow".to_string()
         }
     }
 
