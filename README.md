@@ -1,112 +1,32 @@
-# Flowsurface
+# U3 OrderFlow
 
-[![Crates.io](https://img.shields.io/crates/v/flowsurface)](https://crates.io/crates/flowsurface)
-[![Lint](https://github.com/flowsurface-rs/flowsurface/actions/workflows/lint.yml/badge.svg)](https://github.com/flowsurface-rs/flowsurface/actions/workflows/lint.yml)
-[![Format](https://github.com/flowsurface-rs/flowsurface/actions/workflows/format.yml/badge.svg)](https://github.com/flowsurface-rs/flowsurface/actions/workflows/format.yml)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?&logo=discord&logoColor=white)](https://discord.gg/RN2XAF7ZuR)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/flowsurface-rs/flowsurface/blob/main/LICENSE)
-[![Made with iced](https://iced.rs/badge.svg)](https://github.com/iced-rs/iced)
+U3 OrderFlow 是一款專為加密貨幣市場打造的高效能原生桌面看盤軟體。
+提供專業的訂單流 (Orderflow) 分析與進階指標，幫助交易者精準掌握市場動態。
 
-An open-source native desktop charting application for crypto markets. Supports Binance, Bybit, Hyperliquid, OKX, and MEXC.
+## 🌟 核心特色 (Key Features)
 
-<div align="center">
-  <img
-    src="https://github.com/user-attachments/assets/baddc444-e079-48e5-82b2-4f97094eba07"
-    alt="Flowsurface screenshot"
-    style="max-width: 100%; height: auto;"
-  />
-</div>
+* **自訂專屬介面**：全新升級的 U3 OrderFlow 專屬介面與主題配色。
+* **高階訂單流指標**：
+  * **Delta Bar**：以底部柱狀圖直觀呈現 K 線的多空力道 (Delta)。
+  * **Session Delta Wave (累積 CVD)**：每日台灣時間早上 8 點 (00:00 UTC) 自動重置的波浪柱狀圖，清晰顯示當日累積的多空資金流向。
+  * **CVD Divergence (背離提示)**：當價格與 Delta 發生背離時，直接於 K 線圖中央顯示紅綠箭頭提示，精準捕捉反轉訊號。
+  * **VWAP**：整合於主圖的成交量加權平均價指標。
+* **極簡流暢體驗**：移除不必要的多餘指標，確保軟體運行極致順暢且介面清爽。
+* **多交易所支援**：支援 Binance, Bybit, Hyperliquid, OKX, 與 MEXC。
 
-### Key Features
+## 🚀 開始使用
 
--   Multiple chart/panel types:
-    -   **Heatmap (Historical DOM):** Uses live trades and L2 orderbook to create a time-series heatmap chart. Supports customizable price grouping, different time aggregations, fixed or visible range volume profiles.
-    -   **Candlestick:** Traditional kline chart supporting both time-based and custom tick-based intervals.
-    -   **Footprint:** Price grouped and interval aggregated views for trades on top of a candlestick chart. Supports different clustering methods, configurable imbalance and naked-POC studies.
-    -   **Time & Sales:** Scrollable list of live trades.
-    -   **DOM (Depth of Market) / Ladder:** Displays current L2 orderbook alongside recent trade volumes on grouped price levels.
-    -   **Comparison:** Line graph for comparing multiple data sources, normalized by kline `close` prices on a percentage scale
--   Real-time sound effects driven by trade streams
--   Multi window/monitor support
--   Pane linking for quickly switching tickers across multiple panes
--   Persistent layouts and customizable themes with editable color palettes
+本專案使用 [Rust](https://www.rust-lang.org/) 語言開發。
 
-##### Market data is received directly from exchanges' public REST APIs and WebSockets
+### 編譯與執行
 
-#
-
-#### Historical Trades on Footprint Charts:
-
--   By default, it captures and plots live trades in real time via WebSocket.
--   For Binance tickers, you can optionally backfill the visible time range by enabling trade fetching in the settings:
-    -   [data.binance.vision](https://data.binance.vision/): Fast daily bulk downloads (no intraday).
-    -   REST API (e.g., `/fapi/v1/aggTrades`): Slower, paginated intraday fetching (subject to rate limits).
-    -   The Binance connector can use either or both methods to retrieve historical data as needed.
--   Fetching trades for Bybit/Hyperliquid is not supported, as both lack a suitable REST API. OKX is WIP.
-
-## Installation
-
-### Method 1: Prebuilt Binaries
-
-Standalone executables are available for Windows, macOS, and Linux on the [Releases page](https://github.com/flowsurface-rs/flowsurface/releases).
-
-<details>
-<summary><strong>Having trouble running the file? (Permission/Security warnings)</strong></summary>
- 
-Since these binaries are currently unsigned they might get flagged.
-
--   **Windows**: If you see a "Windows protected your PC" pop-up, click **More info** -> **Run anyway**.
--   **macOS**: If you see "Developer cannot be verified", control-click (right-click) the app and select **Open**, or go to _System Settings > Privacy & Security_ to allow it.
-</details>
-
-### Method 2: Build from Source
-
-#### Requirements
-
--   [Rust toolchain](https://www.rust-lang.org/tools/install)
--   [Git version control system](https://git-scm.com/)
--   System dependencies:
-    -   **Linux**:
-        -   Debian/Ubuntu: `sudo apt install build-essential pkg-config libasound2-dev`
-        -   Arch: `sudo pacman -S base-devel alsa-lib`
-        -   Fedora: `sudo dnf install gcc make alsa-lib-devel`
-    -   **macOS**: Install Xcode Command Line Tools: `xcode-select --install`
-    -   **Windows**: No additional dependencies required
-
-#### Option A: `cargo install`
+確保您已安裝 Rust 工具鏈，然後在專案根目錄執行：
 
 ```bash
-# Install latest globally
-cargo install --git https://github.com/flowsurface-rs/flowsurface flowsurface
-
-# Run
-flowsurface
-```
-
-#### Option B: Cloning the repo
-
-```bash
-# Clone the repository
-git clone https://github.com/flowsurface-rs/flowsurface
-
-cd flowsurface
-
-# Build and run
-cargo build --release
 cargo run --release
 ```
 
-## Credits and thanks to
+這將會編譯並啟動 U3 OrderFlow。
 
--   [Kraken Desktop](https://www.kraken.com/desktop) (formerly [Cryptowatch](https://blog.kraken.com/product/cryptowatch-to-sunset-kraken-pro-to-integrate-cryptowatch-features)), the main inspiration that sparked this project
--   [Halloy](https://github.com/squidowl/halloy), an excellent open-source reference for the foundational code design and the project architecture
--   And of course, [iced](https://github.com/iced-rs/iced), the GUI library that makes all of this possible
-
-## Community
-
-For feedback, questions, or for more casual conversations about the project, join our community on Discord:  
-https://discord.gg/RN2XAF7ZuR
-
-## License
-
-Flowsurface is released under the [GPLv3](./LICENSE) license. Contributions to the project are shared under the same license.  
+---
+*Powered by U3 OrderFlow*
