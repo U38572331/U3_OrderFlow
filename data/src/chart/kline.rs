@@ -241,6 +241,25 @@ impl KlineTrades {
         self.trades.clear();
         self.poc = None;
     }
+
+    pub fn total_qty(&self) -> Qty {
+        let mut sum = Qty::zero();
+        for g in self.trades.values() {
+            sum += g.total_qty();
+        }
+        sum
+    }
+
+    pub fn delta_qty(&self) -> Qty {
+        // We sum delta by summing buy_qty and sell_qty separately and taking the difference, or just summing the deltas.
+        let mut buy = Qty::zero();
+        let mut sell = Qty::zero();
+        for g in self.trades.values() {
+            buy += g.buy_qty;
+            sell += g.sell_qty;
+        }
+        buy - sell
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -382,6 +401,10 @@ pub enum FootprintStudy {
         color_scale: Option<usize>,
         ignore_zeros: bool,
     },
+    StackedImbalance {
+        consecutive: usize,
+        threshold: usize,
+    },
 }
 
 impl FootprintStudy {
@@ -393,17 +416,25 @@ impl FootprintStudy {
                     FootprintStudy::Imbalance { .. },
                     FootprintStudy::Imbalance { .. }
                 )
+                | (
+                    FootprintStudy::StackedImbalance { .. },
+                    FootprintStudy::StackedImbalance { .. }
+                )
         )
     }
 }
 
 impl FootprintStudy {
-    pub const ALL: [FootprintStudy; 2] = [
+    pub const ALL: [FootprintStudy; 3] = [
         FootprintStudy::NPoC { lookback: 80 },
         FootprintStudy::Imbalance {
-            threshold: 200,
+            threshold: 400,
             color_scale: Some(400),
             ignore_zeros: true,
+        },
+        FootprintStudy::StackedImbalance {
+            consecutive: 3,
+            threshold: 400,
         },
     ];
 }
@@ -413,6 +444,7 @@ impl std::fmt::Display for FootprintStudy {
         match self {
             FootprintStudy::NPoC { .. } => write!(f, "Naked Point of Control"),
             FootprintStudy::Imbalance { .. } => write!(f, "Imbalance"),
+            FootprintStudy::StackedImbalance { .. } => write!(f, "Stacked Imbalance"),
         }
     }
 }

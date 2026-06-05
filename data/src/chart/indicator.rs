@@ -15,6 +15,10 @@ pub enum KlineIndicator {
     Volume,
     CumulativeDelta,
     OpenInterest,
+    DeltaBar,
+    VWAP,
+    CVDDivergence,
+    SessionDeltaWave,
 }
 
 impl Indicator for KlineIndicator {
@@ -30,12 +34,23 @@ impl KlineIndicator {
     // Indicator togglers on UI menus depend on these arrays.
     // Every variant needs to be in either SPOT, PERPS or both.
     /// Indicators that can be used with spot market tickers
-    const FOR_SPOT: [KlineIndicator; 2] = [KlineIndicator::Volume, KlineIndicator::CumulativeDelta];
+    const FOR_SPOT: [KlineIndicator; 6] = [
+        KlineIndicator::Volume,
+        KlineIndicator::CumulativeDelta,
+        KlineIndicator::DeltaBar,
+        KlineIndicator::VWAP,
+        KlineIndicator::CVDDivergence,
+        KlineIndicator::SessionDeltaWave,
+    ];
     /// Indicators that can be used with perpetual swap market tickers
-    const FOR_PERPS: [KlineIndicator; 3] = [
+    const FOR_PERPS: [KlineIndicator; 7] = [
         KlineIndicator::Volume,
         KlineIndicator::CumulativeDelta,
         KlineIndicator::OpenInterest,
+        KlineIndicator::DeltaBar,
+        KlineIndicator::VWAP,
+        KlineIndicator::CVDDivergence,
+        KlineIndicator::SessionDeltaWave,
     ];
 }
 
@@ -45,6 +60,10 @@ impl Display for KlineIndicator {
             KlineIndicator::Volume => write!(f, "Volume"),
             KlineIndicator::CumulativeDelta => write!(f, "CVD"),
             KlineIndicator::OpenInterest => write!(f, "Open Interest"),
+            KlineIndicator::DeltaBar => write!(f, "Delta Bar"),
+            KlineIndicator::VWAP => write!(f, "VWAP"),
+            KlineIndicator::CVDDivergence => write!(f, "CVD Divergence"),
+            KlineIndicator::SessionDeltaWave => write!(f, "Session Delta Wave"),
         }
     }
 }

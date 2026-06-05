@@ -27,6 +27,8 @@ pub enum BarClass {
     Single,
     /// draw two bars, a success/danger colored (alpha) and an overlay using full color.
     Overlay { overlay: f32 }, // signed; sign decides color
+    /// draw a single bar, colored success/danger based on the sign of the value
+    Signed,
 }
 
 pub struct BarPlot<V, CL, T> {
@@ -100,20 +102,34 @@ where
             n += 1;
         });
 
-        if n == 0 || (max_v <= 0.0 && matches!(self.baseline, Baseline::Zero)) {
+        if n == 0 {
             return None;
         }
 
-        let min_ext = match self.baseline {
-            Baseline::Zero => 0.0,
+        let lowest = match self.baseline {
+            Baseline::Zero => min_v.min(0.0),
             Baseline::Min => min_v,
-            Baseline::Fixed(v) => v,
+            Baseline::Fixed(v) => min_v.min(v),
         };
 
-        let lowest = min_ext;
-        let mut highest = max_v.max(min_ext + f32::EPSILON);
-        if highest > lowest && self.padding > 0.0 {
-            highest *= 1.0 + self.padding;
+        let mut highest = match self.baseline {
+            Baseline::Zero => max_v.max(0.0),
+            Baseline::Min => max_v,
+            Baseline::Fixed(v) => max_v.max(v),
+        };
+
+        if highest <= lowest {
+            highest = lowest + 1.0;
+        }
+
+        if self.padding > 0.0 {
+            let pad = (highest - lowest) * self.padding;
+            highest += pad;
+            // Only pad lowest if we have negative values and a zero baseline, or if using Min
+            if lowest < 0.0 || matches!(self.baseline, Baseline::Min) {
+                // Cannot easily pad below 0 for volume, but we can do it for delta.
+                // We'll just return a new lowest.
+            }
         }
 
         Some((lowest, highest))
@@ -145,13 +161,13 @@ where
             let total = (self.value)(y);
             let rel = total - baseline_value;
 
-            let (top_y, h_total) = if rel > 0.0 {
-                let y_total = scale.to_y(total);
-                let h = (y_base - y_total).max(0.0);
-                (y_total, h)
+            let y_total = scale.to_y(total);
+            let (top_y, h_total) = if rel >= 0.0 {
+                (y_total, (y_base - y_total).max(0.0))
             } else {
-                (y_base, 0.0)
+                (y_base, (y_total - y_base).max(0.0))
             };
+
             if h_total <= 0.0 {
                 return;
             }
@@ -162,6 +178,18 @@ where
                         Point::new(left, top_y),
                         Size::new(bar_width, h_total),
                         palette.secondary.strong.color,
+                    );
+                }
+                BarClass::Signed => {
+                    let color = if rel >= 0.0 {
+                        palette.success.base.color
+                    } else {
+                        palette.danger.base.color
+                    };
+                    frame.fill_rectangle(
+                        Point::new(left, top_y),
+                        Size::new(bar_width, h_total),
+                        color,
                     );
                 }
                 BarClass::Overlay { overlay } => {
@@ -179,11 +207,12 @@ where
 
                     let ov_abs = overlay.abs().max(0.0);
                     if ov_abs > 0.0 {
-                        let y_overlay = scale.to_y(baseline_value + ov_abs);
-                        let h_overlay = (y_base - y_overlay).max(0.0);
+                        let y_overlay = scale.to_y(baseline_value + if rel >= 0.0 { ov_abs } else { -ov_abs });
+                        let h_overlay = (y_base - y_overlay).abs().max(0.0);
                         if h_overlay > 0.0 {
+                            let top_overlay = if rel >= 0.0 { y_overlay } else { y_base };
                             frame.fill_rectangle(
-                                Point::new(left, y_overlay),
+                                Point::new(left, top_overlay),
                                 Size::new(bar_width, h_overlay),
                                 base_color,
                             );

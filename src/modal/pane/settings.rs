@@ -936,6 +936,40 @@ pub mod study {
                         .padding(4)
                         .into()
                 }
+                FootprintStudy::StackedImbalance {
+                    consecutive,
+                    threshold,
+                } => {
+                    let qty_threshold = {
+                        let info_text = text(format!("Ask:Bid threshold: {threshold}%"));
+                        let threshold_slider =
+                            slider(100.0..=800.0, threshold as f32, move |new_value| {
+                                on_change(FootprintStudy::StackedImbalance {
+                                    consecutive,
+                                    threshold: new_value as usize,
+                                })
+                            })
+                            .step(25.0);
+                        column![info_text, threshold_slider,].padding(8).spacing(4)
+                    };
+
+                    let consecutive_slider = {
+                        let info_text = text(format!("Consecutive levels: {consecutive}"));
+                        let consec_slider =
+                            slider(2.0..=10.0, consecutive as f32, move |new_value| {
+                                on_change(FootprintStudy::StackedImbalance {
+                                    consecutive: new_value as usize,
+                                    threshold,
+                                })
+                            })
+                            .step(1.0);
+                        column![info_text, consec_slider,].padding(8).spacing(4)
+                    };
+
+                    split_column![consecutive_slider, qty_threshold]
+                        .padding(4)
+                        .into()
+                }
             }
         }
     }

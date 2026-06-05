@@ -13,6 +13,12 @@ pub mod cumulative_delta;
 pub mod open_interest;
 pub mod volume;
 
+pub mod cvd_divergence;
+pub mod delta_bar;
+pub mod session_delta_wave;
+pub mod vwap;
+
+
 /// UI adapter methods for converting domain `BasisSeries` into plot-ready series.
 trait BasisSeriesExt<T> {
     fn as_plot_series(&self) -> AnySeries<'_, T>;
@@ -89,6 +95,22 @@ pub trait KlineIndicatorImpl {
         visible_range: std::ops::RangeInclusive<u64>,
     ) -> iced::Element<'a, Message>;
 
+    /// Whether this indicator is drawn directly on the main price chart
+    /// (e.g. VWAP, divergence arrows). If true, it won't be allocated a sub-pane.
+    fn is_overlay(&self) -> bool {
+        false
+    }
+
+    /// Allows the indicator to draw directly on the main Kline chart canvas.
+    /// Only called if `is_overlay()` is true, or if you want to draw things over the main chart regardless.
+    fn draw_overlay(
+        &self,
+        _frame: &mut iced::widget::canvas::Frame,
+        _chart: &ViewState,
+        _theme: &iced::Theme,
+        _visible_range: std::ops::RangeInclusive<u64>,
+    ) {}
+
     fn availability(&self, _chart: &ViewState) -> IndicatorAvailability {
         IndicatorAvailability::Available
     }
@@ -139,6 +161,18 @@ pub fn make_empty(which: KlineIndicator) -> Box<dyn KlineIndicatorImpl> {
         }
         KlineIndicator::OpenInterest => {
             Box::new(super::kline::open_interest::OpenInterestIndicator::new())
+        }
+        KlineIndicator::DeltaBar => {
+            Box::new(super::kline::delta_bar::DeltaBarIndicator::new())
+        }
+        KlineIndicator::VWAP => {
+            Box::new(super::kline::vwap::VWAPIndicator::new())
+        }
+        KlineIndicator::CVDDivergence => {
+            Box::new(super::kline::cvd_divergence::CVDDivergenceIndicator::new())
+        }
+        KlineIndicator::SessionDeltaWave => {
+            Box::new(super::kline::session_delta_wave::SessionDeltaWaveIndicator::new())
         }
     }
 }

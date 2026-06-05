@@ -1,0 +1,300 @@
+use crate::chart::{
+    Caches, Message, ViewState,
+    indicator::{
+        indicator_row,
+        kline::{
+            AvailabilityCause, BasisSeries, BasisSeriesExt, IndicatorAvailability,
+            KlineIndicatorImpl,
+        },
+        plot::{
+            PlotTooltip,
+            bar::{BarClass, BarPlot},
+        },
+    },
+};
+
+use data::chart::{
+    PlotData,
+    kline::{KlineDataPoint, KlineTrades},
+};
+use data::util::format_with_commas;
+use exchange::{Kline, Trade, Volume, unit::Qty};
+
+use iced::widget::{center, text};
+
+use std::collections::BTreeSet;
+use std::ops::RangeInclusive;
+
+pub struct DeltaBarIndicator {
+    cache: Caches,
+    data: BasisSeries<Qty>,
+    availability: IndicatorAvailability,
+}
+
+impl DeltaBarIndicator {
+    pub fn new() -> Self {
+        Self {
+            cache: Caches::default(),
+            data: BasisSeries::default(),
+            availability: IndicatorAvailability::Unknown,
+        }
+    }
+
+    fn indicator_elem<'a>(
+        &'a self,
+        main_chart: &'a ViewState,
+        data_labels_always_visible: bool,
+        visible_range: RangeInclusive<u64>,
+    ) -> iced::Element<'a, Message> {
+        if let Some(message) = self.unavailable_message(main_chart, "Delta Bar") {
+            return center(text(message)).into();
+        }
+
+        let tooltip = |delta: &Qty, _next: Option<&Qty>| {
+            let sign = if *delta > Qty::ZERO { "+" } else { "" };
+            PlotTooltip::new(format!(
+                "Delta: {sign}{}",
+                format_with_commas(delta.to_f32_lossy())
+            ))
+        };
+
+        let bar_kind = |_delta: &Qty| BarClass::Signed;
+
+        let value_fn = |delta: &Qty| delta.to_f32_lossy();
+
+        let plot = BarPlot::new(value_fn, bar_kind)
+            .bar_width_factor(0.9)
+            .with_tooltip(tooltip);
+
+        indicator_row(
+            main_chart,
+            &self.cache,
+            data_labels_always_visible,
+            plot,
+            self.data.as_plot_series(),
+            visible_range,
+        )
+    }
+
+    fn has_directional_volume(volume: Volume) -> bool {
+        volume.buy_sell().is_some()
+    }
+
+    fn volume_delta(volume: Volume) -> Qty {
+        volume
+            .buy_sell()
+            .map(|(buy, sell)| buy - sell)
+            .unwrap_or(Qty::ZERO)
+    }
+
+    fn delta_from_parts(footprint: &KlineTrades, volume: Volume) -> Qty {
+        if footprint.trades.is_empty() {
+            Self::volume_delta(volume)
+        } else {
+            footprint
+                .trades
+                .values()
+                .fold(Qty::ZERO, |acc, group| acc + group.delta_qty())
+        }
+    }
+
+    fn is_directional_parts(footprint: &KlineTrades, volume: Volume) -> bool {
+        !footprint.trades.is_empty() || Self::has_directional_volume(volume)
+    }
+
+    fn datapoint_delta(dp: &KlineDataPoint) -> Qty {
+        Self::delta_from_parts(&dp.footprint, dp.kline.volume)
+    }
+
+    fn is_datapoint_directional(dp: &KlineDataPoint) -> bool {
+        Self::is_directional_parts(&dp.footprint, dp.kline.volume)
+    }
+
+    fn set_availability(&mut self, has_points: bool, has_directional: bool) {
+        self.availability = if !has_points {
+            IndicatorAvailability::Unknown
+        } else if has_directional {
+            IndicatorAvailability::Available
+        } else {
+            IndicatorAvailability::Unavailable(AvailabilityCause::TradeData)
+        };
+    }
+}
+
+impl KlineIndicatorImpl for DeltaBarIndicator {
+    fn clear_all_caches(&mut self) {
+        self.cache.clear_all();
+    }
+
+    fn clear_crosshair_caches(&mut self) {
+        self.cache.clear_crosshair();
+    }
+
+    fn element<'a>(
+        &'a self,
+        chart: &'a ViewState,
+        data_labels_always_visible: bool,
+        visible_range: RangeInclusive<u64>,
+    ) -> iced::Element<'a, Message> {
+        self.indicator_elem(chart, data_labels_always_visible, visible_range)
+    }
+
+    fn availability(&self, _chart: &ViewState) -> IndicatorAvailability {
+        self.availability.clone()
+    }
+
+    fn rebuild_from_source(&mut self, source: &PlotData<KlineDataPoint>) {
+        let deltas = source.map_basis_series(
+            |timeseries| {
+                timeseries
+                    .datapoints
+                    .iter()
+                    .map(|(&time, dp)| (time, Self::datapoint_delta(dp)))
+                    .collect()
+            },
+            |tickseries| {
+                tickseries
+                    .datapoints
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, dp)| {
+                        (
+                            idx as u64,
+                            Self::delta_from_parts(&dp.footprint, dp.kline.volume),
+                        )
+                    })
+                    .collect()
+            },
+        );
+
+        let (has_points, has_directional) = match source {
+            PlotData::TimeBased(timeseries) => {
+                let has_points = !timeseries.datapoints.is_empty();
+                let has_directional = timeseries
+                    .datapoints
+                    .values()
+                    .any(Self::is_datapoint_directional);
+                (has_points, has_directional)
+            }
+            PlotData::TickBased(tickseries) => {
+                let has_points = !tickseries.datapoints.is_empty();
+                let has_directional = tickseries
+                    .datapoints
+                    .iter()
+                    .any(|dp| Self::is_directional_parts(&dp.footprint, dp.kline.volume));
+                (has_points, has_directional)
+            }
+        };
+
+        self.set_availability(has_points, has_directional);
+        self.data = deltas;
+        self.clear_all_caches();
+    }
+
+    fn on_insert_klines(&mut self, klines: &[Kline], source: &PlotData<KlineDataPoint>) {
+        let mut has_directional = false;
+
+        let has_data = {
+            let PlotData::TimeBased(timeseries) = source else {
+                return;
+            };
+
+            let Some(deltas) = self.data.time_mut() else {
+                return;
+            };
+
+            for kline in klines {
+                let (delta, directional) = if let Some(dp) = timeseries.datapoints.get(&kline.time)
+                {
+                    (
+                        Self::datapoint_delta(dp),
+                        Self::is_datapoint_directional(dp),
+                    )
+                } else {
+                    (
+                        Self::volume_delta(kline.volume),
+                        Self::has_directional_volume(kline.volume),
+                    )
+                };
+
+                deltas.insert(kline.time, delta);
+                has_directional |= directional;
+            }
+
+            !deltas.is_empty()
+        };
+
+        if has_directional {
+            self.availability = IndicatorAvailability::Available;
+        }
+
+        if self.availability == IndicatorAvailability::Unknown && has_data {
+            self.availability = IndicatorAvailability::Unavailable(AvailabilityCause::TradeData);
+        }
+
+        self.clear_all_caches();
+    }
+
+    fn on_insert_trades(
+        &mut self,
+        trades: &[Trade],
+        old_dp_len: usize,
+        source: &PlotData<KlineDataPoint>,
+    ) {
+        let mut touched = false;
+
+        match source {
+            PlotData::TimeBased(timeseries) => {
+                if trades.is_empty() {
+                    return;
+                }
+
+                let Some(deltas) = self.data.time_mut() else {
+                    return;
+                };
+
+                let mut touched_times = BTreeSet::new();
+
+                for trade in trades {
+                    let rounded_time = trade.time.floor_to(timeseries.interval);
+                    touched_times.insert(rounded_time);
+                }
+
+                for time in touched_times {
+                    if let Some(dp) = timeseries.datapoints.get(&time) {
+                        deltas.insert(time, Self::datapoint_delta(dp));
+                        touched = true;
+                    }
+                }
+            }
+            PlotData::TickBased(tickseries) => {
+                let Some(deltas) = self.data.tick_mut() else {
+                    return;
+                };
+
+                let start_idx = old_dp_len.saturating_sub(1);
+
+                for (idx, dp) in tickseries.datapoints.iter().enumerate().skip(start_idx) {
+                    deltas.insert(
+                        idx as u64,
+                        Self::delta_from_parts(&dp.footprint, dp.kline.volume),
+                    );
+                    touched = true;
+                }
+            }
+        }
+
+        if touched {
+            self.availability = IndicatorAvailability::Available;
+            self.clear_all_caches();
+        }
+    }
+
+    fn on_ticksize_change(&mut self, source: &PlotData<KlineDataPoint>) {
+        self.rebuild_from_source(source);
+    }
+
+    fn on_basis_change(&mut self, source: &PlotData<KlineDataPoint>) {
+        self.rebuild_from_source(source);
+    }
+}

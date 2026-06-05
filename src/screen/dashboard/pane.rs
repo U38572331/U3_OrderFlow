@@ -877,7 +877,7 @@ impl State {
                         data::chart::KlineChartKind::Footprint { .. } => {
                             let basis = chart.basis();
                             let tick_multiply =
-                                self.settings.tick_multiply.unwrap_or(TickMultiplier(10));
+                                self.settings.tick_multiply.unwrap_or(TickMultiplier(2));
 
                             let kind = ModifierKind::Footprint(basis, tick_multiply);
                             let stream_pair = self.stream_pair();

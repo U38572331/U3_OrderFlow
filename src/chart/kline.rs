@@ -67,11 +67,13 @@ impl Chart for KlineChart {
                 continue;
             }
             if let Some(indi) = self.indicators[*selected_indicator].as_ref() {
-                elements.push(indi.element(
-                    chart_state,
-                    data_labels_always_visible,
-                    earliest..=latest,
-                ));
+                if !indi.is_overlay() {
+                    elements.push(indi.element(
+                        chart_state,
+                        data_labels_always_visible,
+                        earliest..=latest,
+                    ));
+                }
             }
         }
         elements
@@ -879,7 +881,11 @@ impl KlineChart {
     }
 
     pub fn toggle_indicator(&mut self, indicator: KlineIndicator) {
-        let prev_indi_count = self.indicators.values().filter(|v| v.is_some()).count();
+        let prev_indi_count = self
+            .indicators
+            .values()
+            .filter(|v| v.as_ref().is_some_and(|i| !i.is_overlay()))
+            .count();
 
         if self.indicators[indicator].is_some() {
             self.indicators[indicator] = None;
@@ -890,7 +896,11 @@ impl KlineChart {
         }
 
         if let Some(main_split) = self.chart.layout.splits.first() {
-            let current_indi_count = self.indicators.values().filter(|v| v.is_some()).count();
+            let current_indi_count = self
+                .indicators
+                .values()
+                .filter(|v| v.as_ref().is_some_and(|i| !i.is_overlay()))
+                .count();
             self.chart.layout.splits = data::util::calc_panel_splits(
                 *main_split,
                 current_indi_count,
@@ -1005,6 +1015,23 @@ impl canvas::Program<Message> for KlineChart {
                         imbalance.is_some(),
                     );
 
+                    draw_stacked_imbalances(
+                        &self.data_source,
+                        frame,
+                        price_to_y,
+                        interval_to_x,
+                        candle_width,
+                        chart.cell_width,
+                        chart.cell_height,
+                        palette,
+                        studies,
+                        earliest,
+                        latest,
+                        *clusters,
+                        content_spacing,
+                        self.chart.tick_size,
+                    );
+
                     render_data_source(
                         &self.data_source,
                         frame,
@@ -1033,6 +1060,17 @@ impl canvas::Program<Message> for KlineChart {
                                 *clusters,
                                 content_spacing,
                             );
+
+                            draw_candle_stats(
+                                frame,
+                                price_to_y,
+                                x_position,
+                                kline,
+                                trades,
+                                text_size,
+                                palette,
+                                show_text,
+                            );
                         },
                     );
                 }
@@ -1060,6 +1098,13 @@ impl canvas::Program<Message> for KlineChart {
             }
 
             chart.draw_last_price_line(frame, palette, region);
+
+            for indi in self.indicators.values().filter_map(Option::as_ref) {
+                if indi.is_overlay() {
+                    let range = earliest..=latest;
+                    indi.draw_overlay(frame, chart, theme, range);
+                }
+            }
         });
 
         let crosshair = chart.cache.crosshair.draw(renderer, bounds_size, |frame| {
@@ -1390,6 +1435,197 @@ fn draw_all_npocs(
                 })
                 .for_each(|(interval, poc)| draw_the_line(interval, poc));
         }
+    }
+}
+
+fn draw_stacked_imbalances(
+    data_source: &PlotData<KlineDataPoint>,
+    frame: &mut canvas::Frame,
+    price_to_y: impl Fn(Price) -> f32,
+    interval_to_x: impl Fn(u64) -> f32,
+    candle_width: f32,
+    cell_width: f32,
+    cell_height: f32,
+    palette: &Extended,
+    studies: &[FootprintStudy],
+    visible_earliest: u64,
+    visible_latest: u64,
+    cluster_kind: ClusterKind,
+    spacing: ContentGaps,
+    step: PriceStep,
+) {
+    let Some(study) = studies.iter().find_map(|s| {
+        if let FootprintStudy::StackedImbalance { consecutive, threshold } = s {
+            Some((*consecutive, *threshold))
+        } else {
+            None
+        }
+    }) else {
+        return;
+    };
+    
+    let (consecutive, threshold) = study;
+    let lookback = 150; // Scan up to 150 datapoints back
+
+    let (buy_color, sell_color) = (
+        palette.success.weak.color.scale_alpha(0.35),
+        palette.danger.weak.color.scale_alpha(0.35),
+    );
+
+    let bar_width_factor: f32 = 0.9;
+    let inset = (cell_width * (1.0 - bar_width_factor)) / 2.0;
+
+    let start_x_for = |cell_center_x: f32| -> f32 {
+        match cluster_kind {
+            ClusterKind::BidAsk => cell_center_x + (candle_width / 2.0) + spacing.candle_to_cluster,
+            ClusterKind::VolumeProfile | ClusterKind::DeltaProfile => {
+                let content_left = (cell_center_x - (cell_width / 2.0)) + inset;
+                let candle_lane_left = content_left + candle_width + spacing.marker_to_candle;
+                candle_lane_left + (candle_width * 0.25) + spacing.candle_to_cluster
+            }
+        }
+    };
+
+    struct ActiveZone {
+        interval: u64,
+        is_buy: bool,
+        min_price: Price,
+        max_price: Price,
+        mitigated_at: Option<u64>,
+    }
+
+    let mut active_zones: Vec<ActiveZone> = Vec::new();
+
+    let extract_zones = |footprint: &KlineTrades| -> Vec<(bool, Price, Price)> {
+        let mut zones = Vec::new();
+        let mut prices: Vec<Price> = footprint.trades.keys().copied().collect();
+        prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let mut buy_imbalances = std::collections::BTreeSet::new();
+        let mut sell_imbalances = std::collections::BTreeSet::new();
+
+        for &price in &prices {
+            let group = footprint.trades.get(&price).unwrap();
+            let sell_qty = f32::from(group.sell_qty);
+            let higher_price = Price::from_f32(price.to_f32() + step.to_f32_lossy()).round_to_step(step);
+
+            if let Some(higher_group) = footprint.trades.get(&higher_price) {
+                let diagonal_buy_qty = f32::from(higher_group.buy_qty);
+                
+                if diagonal_buy_qty >= sell_qty {
+                    let required_qty = sell_qty * (100 + threshold) as f32 / 100.0;
+                    if diagonal_buy_qty > required_qty {
+                        buy_imbalances.insert(higher_price);
+                    }
+                } else {
+                    let required_qty = diagonal_buy_qty * (100 + threshold) as f32 / 100.0;
+                    if sell_qty > required_qty {
+                        sell_imbalances.insert(price);
+                    }
+                }
+            }
+        }
+
+        let mut extract = |imbalances: &std::collections::BTreeSet<Price>, is_buy: bool| {
+            if imbalances.is_empty() { return; }
+            let imb_vec: Vec<Price> = imbalances.iter().copied().collect();
+            let mut count = 1;
+            let mut start_idx = 0;
+            
+            for i in 1..imb_vec.len() {
+                let expected_price = Price::from_f32(imb_vec[i-1].to_f32() + step.to_f32_lossy()).round_to_step(step);
+                if imb_vec[i] == expected_price {
+                    count += 1;
+                } else {
+                    if count >= consecutive {
+                        zones.push((is_buy, imb_vec[start_idx], imb_vec[i-1]));
+                    }
+                    count = 1;
+                    start_idx = i;
+                }
+            }
+            if count >= consecutive {
+                zones.push((is_buy, imb_vec[start_idx], imb_vec[imb_vec.len()-1]));
+            }
+        };
+
+        extract(&buy_imbalances, true);
+        extract(&sell_imbalances, false);
+
+        zones
+    };
+
+    let mut process_datapoint = |interval: u64, kline: &exchange::Kline, footprint: &KlineTrades| {
+        let high = kline.high;
+        let low = kline.low;
+        
+        for zone in &mut active_zones {
+            if zone.mitigated_at.is_some() { continue; }
+            if zone.is_buy && low <= zone.max_price {
+                zone.mitigated_at = Some(interval);
+            } else if !zone.is_buy && high >= zone.min_price {
+                zone.mitigated_at = Some(interval);
+            }
+        }
+        
+        for (is_buy, min_price, max_price) in extract_zones(footprint) {
+            active_zones.push(ActiveZone {
+                interval,
+                is_buy,
+                min_price,
+                max_price,
+                mitigated_at: None,
+            });
+        }
+    };
+
+    match data_source {
+        PlotData::TickBased(tick_aggr) => {
+            let start_idx = tick_aggr.datapoints.len().saturating_sub(lookback);
+            for (i, dp) in tick_aggr.datapoints[start_idx..].iter().enumerate() {
+                process_datapoint((start_idx + i) as u64, &dp.kline, &dp.footprint);
+            }
+        }
+        PlotData::TimeBased(timeseries) => {
+            let mut iter = timeseries.datapoints.iter().rev().take(lookback).collect::<Vec<_>>();
+            iter.reverse();
+            for (timestamp, dp) in iter {
+                process_datapoint(timestamp.as_u64(), &dp.kline, &dp.footprint);
+            }
+        }
+    }
+
+    let right_bound = visible_latest.saturating_add(10_000_000_000); // Draw far right if not mitigated
+    
+    for zone in active_zones {
+        // Skip rendering if mitigated before visible area
+        if let Some(mitigated_at) = zone.mitigated_at {
+            if mitigated_at < visible_earliest {
+                continue;
+            }
+        }
+        if zone.interval > visible_latest {
+            continue;
+        }
+
+        let start_x = interval_to_x(zone.interval);
+        let end_interval = zone.mitigated_at.unwrap_or(right_bound);
+        let end_x = interval_to_x(end_interval);
+        
+        let center_x = start_x_for(start_x);
+        
+        // Stacked Imbalance zone bounds
+        let y_top = price_to_y(zone.max_price) - (cell_height / 2.0);
+        let y_bottom = price_to_y(zone.min_price) + (cell_height / 2.0);
+        let height = (y_bottom - y_top).max(1.0);
+        
+        let rect_width = (end_x - center_x).max(1.0);
+        if rect_width <= 0.0 {
+            continue;
+        }
+
+        let color = if zone.is_buy { buy_color } else { sell_color };
+        frame.fill_rectangle(Point::new(center_x, y_top), Size::new(rect_width, height), color);
     }
 }
 
@@ -2124,4 +2360,57 @@ fn footprint_summary_padding(
 #[inline]
 fn should_show_text(cell_height_unscaled: f32, cell_width_unscaled: f32, min_w: f32) -> bool {
     cell_height_unscaled > 8.0 && cell_width_unscaled > min_w
+}
+
+fn draw_candle_stats(
+    frame: &mut canvas::Frame,
+    price_to_y: impl Fn(Price) -> f32,
+    x_position: f32,
+    kline: &Kline,
+    trades: &data::chart::kline::KlineTrades,
+    text_size: f32,
+    palette: &Extended,
+    show_text: bool,
+) {
+    if !show_text {
+        return;
+    }
+
+    let total_vol = trades.total_qty();
+    let delta = trades.delta_qty();
+
+    if total_vol == Qty::zero() {
+        return;
+    }
+
+    let delta_pct = (f32::from(delta) / f32::from(total_vol)) * 100.0;
+    
+    let text_color = palette.background.weakest.text;
+    let delta_color = if delta >= Qty::zero() {
+        palette.success.base.color
+    } else {
+        palette.danger.base.color
+    };
+
+    let y_high = price_to_y(kline.high);
+    let mut current_y = y_high - (text_size * 1.2);
+
+    let stats = [
+        (format!("{}", data::util::abbr_large_numbers(f32::from(total_vol))), text_color),
+        (format!("D:{}", data::util::abbr_large_numbers(f32::from(delta))), delta_color),
+        (format!("{:+.1}%", delta_pct), delta_color),
+    ];
+
+    for (text, color) in stats.iter().rev() {
+        draw_cluster_text(
+            frame,
+            text,
+            Point::new(x_position, current_y),
+            text_size * 0.9,
+            *color,
+            Alignment::Center,
+            Alignment::End,
+        );
+        current_y -= text_size * 1.2;
+    }
 }
