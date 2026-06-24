@@ -46,7 +46,7 @@ pub enum AxisScaleClicked {
     Y,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Message {
     Translated(Vector),
     Scaled(f32, Vector),
@@ -57,6 +57,8 @@ pub enum Message {
     BoundsChanged(Rectangle),
     SplitDragged(usize, f32),
     DoubleClick(AxisScaleClicked),
+    Drawing(iced::mouse::Event, Point),
+    DrawingKey(iced::keyboard::Event),
 }
 
 pub trait Chart: PlotConstants + canvas::Program<Message> {
@@ -81,6 +83,14 @@ pub trait Chart: PlotConstants + canvas::Program<Message> {
     fn supports_fit_autoscaling(&self) -> bool;
 
     fn is_empty(&self) -> bool;
+
+    fn drawing_tool(&self) -> data::chart::drawing::DrawingType {
+        data::chart::drawing::DrawingType::Cursor
+    }
+
+    fn handle_drawing(&mut self, _event: iced::mouse::Event, _cursor: iced::Point) {}
+
+    fn handle_drawing_key(&mut self, _event: iced::keyboard::Event) {}
 }
 
 fn canvas_interaction<T: Chart>(
@@ -94,8 +104,22 @@ fn canvas_interaction<T: Chart>(
         return Some(canvas::Action::publish(Message::BoundsChanged(bounds)));
     }
 
+    let is_drawing = !matches!(chart.drawing_tool(), data::chart::drawing::DrawingType::Cursor);
     let shrunken_bounds = bounds.shrink(DRAG_SIZE * 4.0);
     let cursor_position = cursor.position_in(shrunken_bounds);
+
+    if let Event::Keyboard(keyboard_event) = event {
+        return Some(canvas::Action::publish(Message::DrawingKey(keyboard_event.clone())));
+    }
+
+    if is_drawing {
+        if let Event::Mouse(mouse_event) = event {
+            if !matches!(mouse_event, mouse::Event::WheelScrolled { .. }) {
+                let p = cursor.position_in(bounds).unwrap_or_default();
+                return Some(canvas::Action::publish(Message::Drawing(*mouse_event, p)));
+            }
+        }
+    }
 
     if let Event::Mouse(mouse::Event::ButtonReleased(_)) = event {
         match interaction {
@@ -140,7 +164,8 @@ fn canvas_interaction<T: Chart>(
                             }
                         }
                     }
-                    Some(canvas::Action::request_redraw().and_capture())
+                    let p = cursor.position_in(bounds).unwrap_or_default();
+                    Some(canvas::Action::publish(Message::Drawing(*mouse_event, p)).and_capture())
                 }
                 mouse::Event::CursorMoved { .. } => match *interaction {
                     Interaction::Panning { translation, start } => {
@@ -487,6 +512,8 @@ pub fn update<T: Chart>(chart: &mut T, message: &Message) {
             }
         }
         Message::CrosshairMoved => return chart.invalidate_crosshair(),
+        Message::Drawing(event, cursor) => chart.handle_drawing(*event, *cursor),
+        Message::DrawingKey(event) => chart.handle_drawing_key(event.clone()),
     }
     chart.invalidate_all();
 }

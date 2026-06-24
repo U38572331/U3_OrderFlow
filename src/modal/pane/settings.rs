@@ -610,6 +610,8 @@ pub fn kline_cfg_view<'a>(
                         pane,
                         VisualConfig::Kline(data::chart::kline::Config {
                             data_labels_always_visible: value,
+                            big_trade_filter: cfg.big_trade_filter,
+                            show_session_profile: cfg.show_session_profile,
                         }),
                         false,
                     )
@@ -617,9 +619,49 @@ pub fn kline_cfg_view<'a>(
             Some("Show the latest datapoint label even when not hovering"),
             TooltipPosition::Top,
         );
+        let big_trade_slider = labeled_slider(
+            "Big Trade Bubble",
+            0.0..=200.0,
+            cfg.big_trade_filter.unwrap_or(0.0),
+            move |value| {
+                let filter_val = if value <= 0.0 { None } else { Some(value) };
+                Message::VisualConfigChanged(
+                    pane,
+                    VisualConfig::Kline(data::chart::kline::Config {
+                        data_labels_always_visible: cfg.data_labels_always_visible,
+                        big_trade_filter: filter_val,
+                        show_session_profile: cfg.show_session_profile,
+                    }),
+                    false,
+                )
+            },
+            |value| if *value <= 0.0 { "Off".to_string() } else { format!(">{}", *value) },
+            Some(1.0),
+        );
+
+        let session_profile_checkbox = tooltip(
+            checkbox(cfg.show_session_profile)
+                .label("Show Session Profile")
+                .on_toggle(move |value| {
+                    Message::VisualConfigChanged(
+                        pane,
+                        VisualConfig::Kline(data::chart::kline::Config {
+                            data_labels_always_visible: cfg.data_labels_always_visible,
+                            big_trade_filter: cfg.big_trade_filter,
+                            show_session_profile: value,
+                        }),
+                        false,
+                    )
+                }),
+            Some("Display Session Delta and Volume Profile on the right"),
+            TooltipPosition::Top,
+        );
+
         column![
-            text("Data labels").size(crate::style::text_size::SECTION),
+            text("Display").size(crate::style::text_size::SECTION),
             data_labels_checkbox,
+            session_profile_checkbox,
+            big_trade_slider,
         ]
         .spacing(8)
     };

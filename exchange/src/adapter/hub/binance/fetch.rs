@@ -295,21 +295,29 @@ pub(super) async fn fetch_ticker_stats(
 
         let ticker = Ticker::new(symbol, exchange);
 
-        let last_price = serde_util::value_as_f32(&item["lastPrice"])
-            .ok_or_else(|| AdapterError::ParseError("Last price not found".to_string()))?;
+        let last_price = match serde_util::value_as_f32(&item["lastPrice"]) {
+            Some(price) => price,
+            None => continue,
+        };
 
-        let price_change_pt =
-            serde_util::value_as_f32(&item["priceChangePercent"]).ok_or_else(|| {
-                AdapterError::ParseError("Price change percent not found".to_string())
-            })?;
+        let price_change_pt = match serde_util::value_as_f32(&item["priceChangePercent"]) {
+            Some(pt) => pt,
+            None => continue,
+        };
 
         let volume = match market {
             MarketKind::Spot | MarketKind::LinearPerps => {
-                serde_util::value_as_f32(&item["quoteVolume"])
-                    .ok_or_else(|| AdapterError::ParseError("Quote volume not found".to_string()))?
+                match serde_util::value_as_f32(&item["quoteVolume"]) {
+                    Some(vol) => vol,
+                    None => continue,
+                }
             }
-            MarketKind::InversePerps => serde_util::value_as_f32(&item["volume"])
-                .ok_or_else(|| AdapterError::ParseError("Volume not found".to_string()))?,
+            MarketKind::InversePerps => {
+                match serde_util::value_as_f32(&item["volume"]) {
+                    Some(vol) => vol,
+                    None => continue,
+                }
+            }
         };
 
         let daily_volume = match market {

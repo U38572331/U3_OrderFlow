@@ -115,6 +115,7 @@ pub struct State {
     pub streams: ResolvedStream,
     pub status: Status,
     pub link_group: Option<LinkGroup>,
+    pub drawings: data::chart::drawing::ChartDrawings,
 }
 
 impl State {
@@ -1847,6 +1848,7 @@ impl Default for State {
             notifications: vec![],
             status: Status::Ready,
             link_group: None,
+            drawings: Default::default(),
         }
     }
 }

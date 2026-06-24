@@ -31,7 +31,7 @@ num-traits = "0.2.19"
 rustc-hash = "2.1.2"
 enum-map = "2.7.3"
 url = "2.5.8"
-uuid = { version = "1.23.1", features = ["v4"] }
+uuid = { version = "1.23.1", features = ["v4", "serde"] }
 data = { version = "0.8.8", path = "data", package = "flowsurface-data" }
 exchange = { version = "0.8.8", path = "exchange", package = "flowsurface-exchange" }
 

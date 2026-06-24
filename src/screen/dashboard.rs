@@ -63,6 +63,7 @@ pub struct Dashboard {
     pub popout: HashMap<window::Id, (pane_grid::State<pane::State>, WindowSpec)>,
     pub streams: UniqueStreams,
     layout_id: uuid::Uuid,
+    pub selected_drawing_tool: data::chart::drawing::DrawingType,
 }
 
 impl Default for Dashboard {
@@ -73,6 +74,7 @@ impl Default for Dashboard {
             streams: UniqueStreams::default(),
             popout: HashMap::new(),
             layout_id: uuid::Uuid::new_v4(),
+            selected_drawing_tool: Default::default(),
         }
     }
 }
@@ -140,7 +142,31 @@ impl Dashboard {
             streams: UniqueStreams::default(),
             popout,
             layout_id,
+            selected_drawing_tool: Default::default(),
         }
+    }
+
+    pub fn set_drawing_tool(
+        &mut self,
+        tool: data::chart::drawing::DrawingType,
+        main_window: window::Id,
+    ) {
+        self.selected_drawing_tool = tool;
+        self.iter_all_panes_mut(main_window)
+            .for_each(|(_, _, state)| {
+                if let pane::Content::Kline { chart: Some(c), .. } = &mut state.content {
+                    c.set_drawing_tool(tool);
+                }
+            });
+    }
+
+    pub fn clear_drawings(&mut self, main_window: window::Id) {
+        self.iter_all_panes_mut(main_window)
+            .for_each(|(_, _, state)| {
+                if let pane::Content::Kline { chart: Some(c), .. } = &mut state.content {
+                    c.clear_drawings();
+                }
+            });
     }
 
     pub fn load_layout(&mut self, main_window: window::Id) -> Task<Message> {
@@ -158,6 +184,7 @@ impl Dashboard {
                 position: window::Position::Specific(window_spec.position()),
                 size: window_spec.size(),
                 exit_on_close_request: false,
+                decorations: false,
                 ..window::settings()
             });
 
@@ -516,6 +543,7 @@ impl Dashboard {
                     .map(|point| window::Position::Specific(point + Vector::new(20.0, 20.0)))
                     .unwrap_or_default(),
                 exit_on_close_request: false,
+                decorations: false,
                 min_size: Some(iced::Size::new(400.0, 300.0)),
                 ..window::settings()
             });

@@ -136,7 +136,7 @@ impl GroupedTrades {
         match cluster_kind {
             ClusterKind::BidAsk => self.buy_qty.max(self.sell_qty),
             ClusterKind::DeltaProfile => self.buy_qty.abs_diff(self.sell_qty),
-            ClusterKind::VolumeProfile => self.total_qty(),
+            ClusterKind::VolumeProfile | ClusterKind::ProDeltaCandle => self.total_qty(),
         }
     }
 }
@@ -331,13 +331,15 @@ pub enum ClusterKind {
     BidAsk,
     VolumeProfile,
     DeltaProfile,
+    ProDeltaCandle,
 }
 
 impl ClusterKind {
-    pub const ALL: [ClusterKind; 3] = [
+    pub const ALL: [ClusterKind; 4] = [
         ClusterKind::BidAsk,
         ClusterKind::VolumeProfile,
         ClusterKind::DeltaProfile,
+        ClusterKind::ProDeltaCandle,
     ];
 }
 
@@ -347,16 +349,29 @@ impl std::fmt::Display for ClusterKind {
             ClusterKind::BidAsk => write!(f, "Bid/Ask"),
             ClusterKind::VolumeProfile => write!(f, "Volume Profile"),
             ClusterKind::DeltaProfile => write!(f, "Delta Profile"),
+            ClusterKind::ProDeltaCandle => write!(f, "Pro Delta Candle"),
         }
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
     // Whether to show last value labels on top right/left when not hovering
     // e.g. OHLC/bar change values for the main chart, or last value of an indicator series
     pub data_labels_always_visible: bool,
+    pub big_trade_filter: Option<f32>,
+    pub show_session_profile: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            data_labels_always_visible: false,
+            big_trade_filter: None,
+            show_session_profile: true,
+        }
+    }
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]

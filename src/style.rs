@@ -91,7 +91,6 @@ pub fn venue_icon(venue: exchange::adapter::Venue) -> Icon {
     }
 }
 
-#[cfg(target_os = "macos")]
 pub fn title_text(theme: &Theme) -> iced::widget::text::Style {
     let palette = theme.extended_palette();
 

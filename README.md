@@ -1,32 +1,42 @@
-# U3 OrderFlow
+# U3 Crypto Orderflow
 
-U3 OrderFlow 是一款專為加密貨幣市場打造的高效能原生桌面看盤軟體。
-提供專業的訂單流 (Orderflow) 分析與進階指標，幫助交易者精準掌握市場動態。
+U3 Crypto Orderflow is an advanced, high-performance charting and orderflow analysis platform designed specifically for cryptocurrency trading. Built entirely in Rust, it delivers a deeply optimized, latency-sensitive experience that empowers institutional and retail traders with precise market microstructure insights.
 
-## 🌟 核心特色 (Key Features)
+![U3 Crypto Orderflow Preview](assets/preview.png)
 
-* **自訂專屬介面**：全新升級的 U3 OrderFlow 專屬介面與主題配色。
-* **高階訂單流指標**：
-  * **Delta Bar**：以底部柱狀圖直觀呈現 K 線的多空力道 (Delta)。
-  * **Session Delta Wave (累積 CVD)**：每日台灣時間早上 8 點 (00:00 UTC) 自動重置的波浪柱狀圖，清晰顯示當日累積的多空資金流向。
-  * **CVD Divergence (背離提示)**：當價格與 Delta 發生背離時，直接於 K 線圖中央顯示紅綠箭頭提示，精準捕捉反轉訊號。
-  * **VWAP**：整合於主圖的成交量加權平均價指標。
-* **極簡流暢體驗**：移除不必要的多餘指標，確保軟體運行極致順暢且介面清爽。
-* **多交易所支援**：支援 Binance, Bybit, Hyperliquid, OKX, 與 MEXC。
+## Core Features
 
-## 🚀 開始使用
+### Advanced Orderflow Visualization
+- **Footprint Charts & Imbalances**: Analyze bid/ask volume distribution at specific price levels to identify stacked imbalances and institutional footprints.
+- **Delta & Volume Profiles**: Real-time tracking of buying and selling pressure. Integrated Session Delta Profile and Volume Profile precisely aligned to provide structural context for the trading session.
+- **CVD (Cumulative Volume Delta) Divergence**: Automated detection of price and CVD divergences, providing visual cues for potential trend reversals directly on the chart.
+- **Dynamic VWAP**: Real-time Volume Weighted Average Price calculation for accurate baseline assessment.
 
-本專案使用 [Rust](https://www.rust-lang.org/) 語言開發。
+### High-Performance Architecture
+- **Rust Native**: Leverages Rust's memory safety and concurrency to handle massive amounts of real-time tick data with minimal overhead.
+- **Hardware Acceleration**: Built on top of iced and wgpu to render thousands of dynamic UI elements and chart primitives efficiently.
+- **Streamlined Workflow**: Intuitive drawing tools with intelligent snapping, hit-testing, and rapid deletion functions designed for fast-paced trading environments.
 
-### 編譯與執行
+### Exchange Integration
+Seamlessly connects with major cryptocurrency exchanges for real-time tick, trade, and depth data:
+- Binance
+- Bybit
+- Hyperliquid
+- OKX
+- MEXC
 
-確保您已安裝 Rust 工具鏈，然後在專案根目錄執行：
+## Getting Started
+
+Ensure you have the latest stable version of Rust and Cargo installed.
 
 ```bash
+# Clone the repository
+git clone https://github.com/U38572331/U3_OrderFlow.git
+cd U3_OrderFlow
+
+# Build and run the platform in release mode for optimal performance
 cargo run --release
 ```
 
-這將會編譯並啟動 U3 OrderFlow。
-
----
-*Powered by U3 OrderFlow*
+## Disclaimer
+This software is provided for educational and analytical purposes only. It does not constitute financial advice. Cryptocurrency trading involves substantial risk.

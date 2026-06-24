@@ -87,6 +87,14 @@ struct Flowsurface {
 }
 
 #[derive(Debug, Clone)]
+pub enum TitleBarAction {
+    Minimize,
+    Maximize,
+    Close,
+    Drag,
+}
+
+#[derive(Debug, Clone)]
 enum Message {
     Sidebar(dashboard::sidebar::Message),
     MarketWsEvent(exchange::Event),
@@ -109,6 +117,7 @@ enum Message {
     ToggleTradeFetch(bool),
     ApplyVolumeSizeUnit(exchange::SizeUnit),
     RemoveNotification(usize),
+    TitleBarAction(window::Id, TitleBarAction),
     ToggleDialogModal(Option<screen::ConfirmDialog<Message>>),
     ThemeEditor(modal::theme_editor::Message),
     NetworkManager(modal::network_manager::Message),
@@ -126,6 +135,7 @@ impl Flowsurface {
                 size,
                 position,
                 exit_on_close_request: false,
+                decorations: false,
                 ..window::settings()
             };
             window::open(config)
@@ -197,6 +207,14 @@ impl Flowsurface {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::TitleBarAction(id, action) => {
+                return match action {
+                    TitleBarAction::Minimize => iced::window::minimize(id, true),
+                    TitleBarAction::Maximize => iced::window::toggle_maximize(id),
+                    TitleBarAction::Close => iced::window::close(id),
+                    TitleBarAction::Drag => iced::window::drag(id),
+                };
+            }
             Message::MarketWsEvent(event) => {
                 let main_window_id = self.main_window.id;
                 let dashboard = self.active_dashboard_mut();
@@ -638,6 +656,14 @@ impl Flowsurface {
                     Some(dashboard::sidebar::Action::ErrorOccurred(err)) => {
                         self.notifications.push(Toast::error(err.to_string()));
                     }
+                    Some(dashboard::sidebar::Action::SelectDrawingTool(tool)) => {
+                        let main_window_id = self.main_window.id;
+                        self.active_dashboard_mut().set_drawing_tool(tool, main_window_id);
+                    }
+                    Some(dashboard::sidebar::Action::ClearDrawings) => {
+                        let main_window_id = self.main_window.id;
+                        self.active_dashboard_mut().clear_drawings(main_window_id);
+                    }
                     None => {}
                 }
 
@@ -668,7 +694,7 @@ impl Flowsurface {
         let content = if id == self.main_window.id {
             let sidebar_view = self
                 .sidebar
-                .view(self.audio_stream.volume())
+                .view(self.audio_stream.volume(), dashboard.selected_drawing_tool)
                 .map(Message::Sidebar);
 
             let dashboard_view = dashboard
@@ -678,36 +704,81 @@ impl Flowsurface {
                     event: msg,
                 });
 
-            let header_title = {
-                #[cfg(target_os = "macos")]
-                {
-                    iced::widget::center(
-                        text("U3 ORDERFLOW")
-                            .font(iced::Font {
-                                weight: iced::font::Weight::Bold,
-                                ..Default::default()
-                            })
-                            .size(crate::style::text_size::TITLE)
-                            .style(style::title_text),
-                    )
-                    .height(20)
-                    .align_y(Alignment::Center)
-                    .padding(padding::top(4))
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    column![]
-                }
-            };
+            let title_text = text("U3 ORDERFLOW")
+                .font(iced::Font {
+                    weight: iced::font::Weight::Bold,
+                    ..Default::default()
+                })
+                .size(crate::style::text_size::TITLE)
+                .style(style::title_text);
+
+            let drag_area = container(
+                iced::widget::mouse_area(
+                    iced::widget::center(title_text)
+                )
+                .on_press(Message::TitleBarAction(id, TitleBarAction::Drag))
+            ).width(iced::Length::Fill);
+
+            let close_btn = button(text("X").size(14).align_x(iced::alignment::Horizontal::Center).align_y(iced::alignment::Vertical::Center))
+                .on_press(Message::TitleBarAction(id, TitleBarAction::Close))
+                .style(iced::widget::button::danger)
+                .width(30).height(24);
+
+            let max_btn = button(text("O").size(14).align_x(iced::alignment::Horizontal::Center).align_y(iced::alignment::Vertical::Center))
+                .on_press(Message::TitleBarAction(id, TitleBarAction::Maximize))
+                .style(iced::widget::button::secondary)
+                .width(30).height(24);
+
+            let min_btn = button(text("_").size(14).align_x(iced::alignment::Horizontal::Center).align_y(iced::alignment::Vertical::Center))
+                .on_press(Message::TitleBarAction(id, TitleBarAction::Minimize))
+                .style(iced::widget::button::secondary)
+                .width(30).height(24);
+
+            let header_title = row![
+                drag_area,
+                row![min_btn, max_btn, close_btn].spacing(4),
+            ]
+            .width(iced::Length::Fill)
+            .height(30)
+            .align_y(Alignment::Center)
+            .padding(padding::right(8));
 
             let base = column![
                 header_title,
                 match sidebar_pos {
-                    sidebar::Position::Left => row![sidebar_view, dashboard_view,],
-                    sidebar::Position::Right => row![dashboard_view, sidebar_view],
+                    sidebar::Position::Left => row![
+                        container(sidebar_view).height(iced::Length::Fill).style(|theme: &iced::Theme| {
+                            let p = theme.extended_palette();
+                            container::Style {
+                                background: Some(p.background.weak.color.into()),
+                                ..Default::default()
+                            }
+                        }),
+                        container(iced::widget::Space::new().width(1)).height(iced::Length::Fill).style(|theme: &iced::Theme| {
+                            container::Style {
+                                background: Some(theme.extended_palette().background.strong.color.into()),
+                                ..Default::default()
+                            }
+                        }),
+                        dashboard_view,
+                    ],
+                    sidebar::Position::Right => row![
+                        dashboard_view,
+                        container(iced::widget::Space::new().width(1)).height(iced::Length::Fill).style(|theme: &iced::Theme| {
+                            container::Style {
+                                background: Some(theme.extended_palette().background.strong.color.into()),
+                                ..Default::default()
+                            }
+                        }),
+                        container(sidebar_view).height(iced::Length::Fill).style(|theme: &iced::Theme| {
+                            let p = theme.extended_palette();
+                            container::Style {
+                                background: Some(p.background.weak.color.into()),
+                                ..Default::default()
+                            }
+                        }),
+                    ],
                 }
-                .spacing(4)
-                .padding(8),
             ];
 
             if let Some(menu) = self.sidebar.active_menu() {
@@ -765,7 +836,9 @@ impl Flowsurface {
             .market_subscriptions(&self.handles)
             .map(Message::MarketWsEvent);
 
-        let tick = iced::window::frames().map(Message::Tick);
+        // 6ms roughly equals 166 FPS
+        let tick = iced::time::every(std::time::Duration::from_millis(6))
+            .map(|_| Message::Tick(std::time::Instant::now()));
 
         let hotkeys = keyboard::listen().filter_map(|event| {
             let keyboard::Event::KeyPressed { key, .. } = event else {
