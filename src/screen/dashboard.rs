@@ -1235,6 +1235,34 @@ impl Dashboard {
         }
         self.refresh_streams(main_window)
     }
+    pub fn handle_gex_event(&mut self, event: crate::connector::gex_client::GexEvent) {
+        // Find panes that have GexLevels indicator and pass the event to them
+        for (_, state) in self.panes.iter_mut() {
+            if let pane::Content::Kline { indicators, chart, .. } = &mut state.content {
+                if indicators.contains(&data::chart::indicator::KlineIndicator::GexLevels) {
+                    if let Some(chart) = chart {
+                        chart.on_gex_event(&event);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn gex_subscription(&self, cfg: &data::config::gwtrade::GWTradeConfig) -> Subscription<crate::connector::gex_client::GexEvent> {
+        let has_gex = self.panes.iter().any(|(_, state)| {
+            if let pane::Content::Kline { indicators, .. } = &state.content {
+                indicators.contains(&data::chart::indicator::KlineIndicator::GexLevels)
+            } else {
+                false
+            }
+        });
+
+        if has_gex && !cfg.token.is_empty() {
+            crate::connector::gex_client::subscribe("wss://gwtrade.app/api/atas/ws".to_string(), cfg.token.clone())
+        } else {
+            Subscription::none()
+        }
+    }
 
     pub fn market_subscriptions(&self, handles: &AdapterHandles) -> Subscription<exchange::Event> {
         let unique_streams = self

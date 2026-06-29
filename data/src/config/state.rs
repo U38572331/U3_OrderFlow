@@ -26,6 +26,7 @@ pub struct State {
     pub trade_fetch_enabled: bool,
     pub size_in_quote_ccy: exchange::SizeUnit,
     pub proxy_cfg: Option<exchange::proxy::Proxy>,
+    pub gwtrade_cfg: super::gwtrade::GWTradeConfig,
 }
 
 impl State {
@@ -41,6 +42,7 @@ impl State {
         trade_fetch_enabled: bool,
         volume_size_unit: exchange::SizeUnit,
         proxy_cfg: Option<exchange::proxy::Proxy>,
+        gwtrade_cfg: super::gwtrade::GWTradeConfig,
     ) -> Self {
         State {
             layout_manager,
@@ -54,6 +56,7 @@ impl State {
             trade_fetch_enabled,
             size_in_quote_ccy: volume_size_unit,
             proxy_cfg,
+            gwtrade_cfg,
         }
     }
 }

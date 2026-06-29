@@ -19,6 +19,8 @@ pub enum KlineIndicator {
     VWAP,
     CVDDivergence,
     SessionDeltaWave,
+    GWTradeEffort,
+    GexLevels,
 }
 
 impl Indicator for KlineIndicator {
@@ -34,16 +36,18 @@ impl KlineIndicator {
     // Indicator togglers on UI menus depend on these arrays.
     // Every variant needs to be in either SPOT, PERPS or both.
     /// Indicators that can be used with spot market tickers
-    const FOR_SPOT: [KlineIndicator; 6] = [
+    const FOR_SPOT: [KlineIndicator; 8] = [
         KlineIndicator::Volume,
         KlineIndicator::CumulativeDelta,
         KlineIndicator::DeltaBar,
         KlineIndicator::VWAP,
         KlineIndicator::CVDDivergence,
         KlineIndicator::SessionDeltaWave,
+        KlineIndicator::GWTradeEffort,
+        KlineIndicator::GexLevels,
     ];
     /// Indicators that can be used with perpetual swap market tickers
-    const FOR_PERPS: [KlineIndicator; 7] = [
+    const FOR_PERPS: [KlineIndicator; 9] = [
         KlineIndicator::Volume,
         KlineIndicator::CumulativeDelta,
         KlineIndicator::OpenInterest,
@@ -51,6 +55,8 @@ impl KlineIndicator {
         KlineIndicator::VWAP,
         KlineIndicator::CVDDivergence,
         KlineIndicator::SessionDeltaWave,
+        KlineIndicator::GWTradeEffort,
+        KlineIndicator::GexLevels,
     ];
 }
 
@@ -64,6 +70,8 @@ impl Display for KlineIndicator {
             KlineIndicator::VWAP => write!(f, "VWAP"),
             KlineIndicator::CVDDivergence => write!(f, "CVD Divergence"),
             KlineIndicator::SessionDeltaWave => write!(f, "Session Delta Wave"),
+            KlineIndicator::GWTradeEffort => write!(f, "GWTrade Effort"),
+            KlineIndicator::GexLevels => write!(f, "GEX Levels"),
         }
     }
 }

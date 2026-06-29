@@ -143,7 +143,7 @@ impl Chart for KlineChart {
                 let mut hit_index = None;
                 
                 for (i, drawing) in self.drawings.drawings.iter().enumerate().rev() {
-                    let mut points = match &drawing.state {
+                    let points = match &drawing.state {
                         data::chart::drawing::DrawingState::Initial => continue,
                         data::chart::drawing::DrawingState::OnePoint(p) => vec![*p],
                         data::chart::drawing::DrawingState::Completed(p1, p2) => vec![*p1, *p2],
@@ -669,7 +669,18 @@ impl KlineChart {
         self.chart.layout()
     }
 
+    pub fn on_open_interest(&mut self, pairs: &[exchange::OpenInterest]) {
+        for indicator in self.indicators.values_mut().flatten() {
+            indicator.on_open_interest(pairs);
+        }
+    }
 
+    pub fn on_gex_event(&mut self, event: &crate::connector::gex_client::GexEvent) {
+        if let Some(indicator) = &mut self.indicators[KlineIndicator::GexLevels] {
+            indicator.on_gex_event(event);
+            self.chart.cache.clear_all();
+        }
+    }
 
     pub fn set_drawing_tool(&mut self, tool: data::chart::drawing::DrawingType) {
         self.drawing_tool = tool;

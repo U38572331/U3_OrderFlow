@@ -84,6 +84,7 @@ struct Flowsurface {
     timezone: data::UserTimezone,
     theme: data::Theme,
     notifications: Notifications,
+    gwtrade_cfg: data::config::gwtrade::GWTradeConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +99,7 @@ pub enum TitleBarAction {
 enum Message {
     Sidebar(dashboard::sidebar::Message),
     MarketWsEvent(exchange::Event),
+    GexClientEvent(crate::connector::gex_client::GexEvent),
     Dashboard {
         /// If `None`, the active layout is used for the event.
         layout_id: Option<uuid::Uuid>,
@@ -114,6 +116,7 @@ enum Message {
     ThemeSelected(iced_core::Theme),
     ScaleFactorChanged(data::ScaleFactor),
     SetTimezone(data::UserTimezone),
+    SetGWTradeToken(String),
     ToggleTradeFetch(bool),
     ApplyVolumeSizeUnit(exchange::SizeUnit),
     RemoveNotification(usize),
@@ -164,6 +167,7 @@ impl Flowsurface {
             theme: saved_state.theme,
             notifications: Notifications::new(),
             network: NetworkManager::new(saved_state.proxy_cfg),
+            gwtrade_cfg: saved_state.gwtrade_cfg,
         };
 
         if let Some(err) = audio_init_err {
@@ -447,8 +451,12 @@ impl Flowsurface {
             Message::RemoveNotification(index) => {
                 self.notifications.remove(index);
             }
-            Message::SetTimezone(tz) => {
-                self.timezone = tz;
+            Message::SetTimezone(timezone) => {
+                self.timezone = timezone;
+                self.sidebar.sync_tickers_table_settings();
+            }
+            Message::SetGWTradeToken(token) => {
+                self.gwtrade_cfg.token = token;
             }
             Message::ScaleFactorChanged(value) => {
                 self.ui_scale_factor = value;
@@ -669,6 +677,9 @@ impl Flowsurface {
 
                 return task.map(Message::Sidebar);
             }
+            Message::GexClientEvent(event) => {
+                self.active_dashboard_mut().handle_gex_event(event);
+            }
             Message::ApplyVolumeSizeUnit(pref) => {
                 self.volume_size_unit = pref;
                 self.confirm_dialog = None;
@@ -835,6 +846,8 @@ impl Flowsurface {
             .active_dashboard()
             .market_subscriptions(&self.handles)
             .map(Message::MarketWsEvent);
+            
+        let gex_subscription = self.active_dashboard().gex_subscription(&self.gwtrade_cfg).map(Message::GexClientEvent);
 
         // 6ms roughly equals 166 FPS
         let tick = iced::time::every(std::time::Duration::from_millis(6))
@@ -850,10 +863,11 @@ impl Flowsurface {
             }
         });
 
-        Subscription::batch(vec![
-            exchange_streams,
-            sidebar,
+        Subscription::batch([
             window_events,
+            sidebar,
+            exchange_streams,
+            gex_subscription,
             tick,
             hotkeys,
         ])
@@ -1124,6 +1138,11 @@ impl Flowsurface {
                             column![trade_fetch_checkbox, toggle_theme_editor, toggle_network_editor].spacing(8),
                         ]
                         .spacing(12),
+                        column![
+                            text("GWTrade Settings").size(crate::style::text_size::SECTION),
+                            iced::widget::text_input("API Token...", &self.gwtrade_cfg.token)
+                                .on_input(Message::SetGWTradeToken),
+                        ].spacing(12),
                         footer,
                         ; spacing = 16, align_x = Alignment::Start
                     ];
@@ -1400,6 +1419,7 @@ impl Flowsurface {
             connector::fetcher::is_trade_fetch_enabled(),
             self.volume_size_unit,
             proxy_cfg_persisted,
+            self.gwtrade_cfg.clone(),
         );
 
         match serde_json::to_string(&state) {

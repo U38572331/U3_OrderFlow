@@ -17,6 +17,8 @@ pub mod cvd_divergence;
 pub mod delta_bar;
 pub mod session_delta_wave;
 pub mod vwap;
+pub mod gex_levels;
+pub mod gwtrade_effort;
 
 
 /// UI adapter methods for converting domain `BasisSeries` into plot-ready series.
@@ -111,6 +113,17 @@ pub trait KlineIndicatorImpl {
         _visible_range: std::ops::RangeInclusive<u64>,
     ) {}
 
+    fn draw_underlay(
+        &self,
+        _frame: &mut iced::widget::canvas::Frame,
+        _chart: &ViewState,
+        _theme: &iced::Theme,
+        _visible_range: std::ops::RangeInclusive<u64>,
+    ) {
+    }
+
+    fn on_gex_event(&mut self, _event: &crate::connector::gex_client::GexEvent) {}
+
     fn availability(&self, _chart: &ViewState) -> IndicatorAvailability {
         IndicatorAvailability::Available
     }
@@ -174,5 +187,7 @@ pub fn make_empty(which: KlineIndicator) -> Box<dyn KlineIndicatorImpl> {
         KlineIndicator::SessionDeltaWave => {
             Box::new(super::kline::session_delta_wave::SessionDeltaWaveIndicator::new())
         }
+        KlineIndicator::GexLevels => Box::new(gex_levels::GexLevelsIndicator::new()),
+        KlineIndicator::GWTradeEffort => Box::new(gwtrade_effort::GWTradeEffortIndicator::new()),
     }
 }
