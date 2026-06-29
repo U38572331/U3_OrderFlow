@@ -16,8 +16,8 @@ use crate::chart::{
 
 #[derive(Debug, Clone)]
 struct EffortZone {
-    start_time: u64,
-    end_time: u64,
+    start_basis: u64,
+    end_basis: u64,
     is_bullish: bool,
     high: f64,
     low: f64,
@@ -41,14 +41,15 @@ pub struct GWTradeEffortIndicator {
     streak_high: f64,
     streak_low: f64,
     streak_start_time: u64,
+    streak_start_basis: u64,
     
     streak_active: bool,
     dev_active: bool,
     dev_bull: bool,
     dev_high: f64,
     dev_low: f64,
-    dev_start_time: u64,
-    latest_kline_time: u64,
+    dev_start_basis: u64,
+    latest_kline_basis: u64,
 }
 
 impl GWTradeEffortIndicator {
@@ -69,19 +70,20 @@ impl GWTradeEffortIndicator {
             streak_high: 0.0,
             streak_low: f64::MAX,
             streak_start_time: 0,
+            streak_start_basis: 0,
             
             streak_active: false,
             dev_active: false,
             dev_bull: false,
             dev_high: 0.0,
             dev_low: 0.0,
-            dev_start_time: 0,
-            latest_kline_time: 0,
+            dev_start_basis: 0,
+            latest_kline_basis: 0,
         }
     }
     
-    fn process_kline(&mut self, kline: &Kline, tick_size: f64) {
-        self.latest_kline_time = kline.time.into();
+    fn process_kline(&mut self, kline: &Kline, tick_size: f64, basis: u64) {
+        self.latest_kline_basis = basis;
         let volume = kline.volume.total().to_f32_lossy() as f64;
         if volume == 0.0 {
             return;
@@ -116,6 +118,7 @@ impl GWTradeEffortIndicator {
             self.last_direction_bull = is_bullish;
             if self.streak_count == 0 {
                 self.streak_start_time = kline.time.into();
+                self.streak_start_basis = basis;
             }
             self.streak_count += 1;
         } else {
@@ -136,15 +139,15 @@ impl GWTradeEffortIndicator {
             self.dev_bull = self.last_direction_bull;
             self.dev_high = self.streak_high;
             self.dev_low = self.streak_low;
-            self.dev_start_time = self.streak_start_time;
+            self.dev_start_basis = self.streak_start_basis;
             
         } else if self.streak_active {
             self.streak_active = false;
             self.dev_active = false;
             
             self.zones.push(EffortZone {
-                start_time: self.streak_start_time,
-                end_time: kline.time.into(), // ending time
+                start_basis: self.streak_start_basis,
+                end_basis: basis, // ending time
                 is_bullish: self.last_direction_bull,
                 high: self.streak_high,
                 low: self.streak_low,
@@ -159,8 +162,8 @@ impl GWTradeEffortIndicator {
 impl KlineIndicatorImpl for GWTradeEffortIndicator {
     fn clear_all_caches(&mut self) {
         self.zones.clear();
-        self.dev_start_time = 0;
-        self.latest_kline_time = 0;
+        self.dev_start_basis = 0;
+        self.latest_kline_basis = 0;
         self.streak_count = 0;
         self.streak_active = false;
         self.dev_active = false;
@@ -188,10 +191,10 @@ impl KlineIndicatorImpl for GWTradeEffortIndicator {
         _theme: &iced::Theme,
         visible_range: RangeInclusive<u64>,
     ) {
-        let draw_zone = |start_time: u64, end_time: u64, high: f64, low: f64, is_bullish: bool, frame: &mut Frame| {
+        let draw_zone = |start_basis: u64, end_basis: u64, high: f64, low: f64, is_bullish: bool, frame: &mut Frame| {
             // Find X positions
-            let start_x = chart.interval_to_x(start_time);
-            let end_x = chart.interval_to_x(end_time) + (self.zone_max_extensions as f32 * chart.cell_width);
+            let start_x = chart.interval_to_x(start_basis);
+            let end_x = chart.interval_to_x(end_basis) + (self.zone_max_extensions as f32 * chart.cell_width);
             
             let high_price = Price::from_f32(high as f32);
             let low_price = Price::from_f32(low as f32);
@@ -230,11 +233,11 @@ impl KlineIndicatorImpl for GWTradeEffortIndicator {
         };
         
         for zone in &self.zones {
-            draw_zone(zone.start_time, zone.end_time, zone.high, zone.low, zone.is_bullish, frame);
+            draw_zone(zone.start_basis, zone.end_basis, zone.high, zone.low, zone.is_bullish, frame);
         }
         
         if self.dev_active {
-            draw_zone(self.dev_start_time, self.latest_kline_time.max(self.dev_start_time), self.dev_high, self.dev_low, self.dev_bull, frame);
+            draw_zone(self.dev_start_basis, self.latest_kline_basis.max(self.dev_start_basis), self.dev_high, self.dev_low, self.dev_bull, frame);
         }
     }
 
@@ -244,31 +247,39 @@ impl KlineIndicatorImpl for GWTradeEffortIndicator {
         self.streak_active = false;
         self.dev_active = false;
         
-        let timeseries = match source {
-            data::chart::PlotData::TimeBased(ts) => ts,
-            _ => return,
-        };
-        
-        let klines = &timeseries.datapoints;
-        if klines.is_empty() {
-            return;
-        }
-        
-        // Find tick size from first diff or from chart config? We don't have chart config here easily.
-        // Assuming tick_size is 0.25 (NQ) for now, wait we can calculate from high/low diff or pass it via view state?
-        // Let's use a very small tick size (0.01) if not known, it just changes effort scale.
-        // Actually we don't have tick_size in rebuild_from_source. I'll hardcode 0.25 as a default for NQ.
         let tick_size = 0.25; 
         
-        for (_, dp) in klines {
-            self.process_kline(&dp.kline, tick_size);
+        match source {
+            data::chart::PlotData::TimeBased(ts) => {
+                let klines = &ts.datapoints;
+                for (_, dp) in klines {
+                    self.process_kline(&dp.kline, tick_size, dp.kline.time.into());
+                }
+            }
+            data::chart::PlotData::TickBased(ta) => {
+                let klines = &ta.datapoints;
+                for (i, dp) in klines.iter().enumerate() {
+                    self.process_kline(&dp.kline, tick_size, i as u64);
+                }
+            }
         }
     }
 
     fn on_insert_klines(&mut self, klines: &[Kline], _source: &PlotData<KlineDataPoint>) {
         let tick_size = 0.25;
         for kline in klines {
-            self.process_kline(kline, tick_size);
+            self.process_kline(kline, tick_size, kline.time.into());
+        }
+    }
+
+    fn on_insert_trades(
+        &mut self,
+        _trades: &[Trade],
+        _old_dp_len: usize,
+        source: &PlotData<KlineDataPoint>,
+    ) {
+        if matches!(source, data::chart::PlotData::TickBased(_)) {
+            self.rebuild_from_source(source);
         }
     }
 }
