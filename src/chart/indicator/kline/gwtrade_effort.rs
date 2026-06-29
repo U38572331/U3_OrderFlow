@@ -50,6 +50,7 @@ pub struct GWTradeEffortIndicator {
     dev_low: f64,
     dev_start_basis: u64,
     latest_kline_basis: u64,
+    is_tick_chart: bool,
 }
 
 impl GWTradeEffortIndicator {
@@ -79,6 +80,7 @@ impl GWTradeEffortIndicator {
             dev_low: 0.0,
             dev_start_basis: 0,
             latest_kline_basis: 0,
+            is_tick_chart: false,
         }
     }
     
@@ -246,6 +248,7 @@ impl KlineIndicatorImpl for GWTradeEffortIndicator {
         self.streak_count = 0;
         self.streak_active = false;
         self.dev_active = false;
+        self.is_tick_chart = matches!(source, data::chart::PlotData::TickBased(_));
         
         let tick_size = 0.25; 
         
