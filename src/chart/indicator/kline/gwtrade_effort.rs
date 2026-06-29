@@ -285,4 +285,12 @@ impl KlineIndicatorImpl for GWTradeEffortIndicator {
             self.rebuild_from_source(source);
         }
     }
+
+    fn on_basis_change(&mut self, source: &PlotData<KlineDataPoint>) {
+        self.rebuild_from_source(source);
+    }
+
+    fn on_ticksize_change(&mut self, source: &PlotData<KlineDataPoint>) {
+        self.rebuild_from_source(source);
+    }
 }
